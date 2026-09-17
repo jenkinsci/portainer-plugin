@@ -10,6 +10,7 @@
 // Semantics (default): install when missing; if the release exists, re-POST install
 // (Portainer libhelm install-or-upgrade). Optional forceReinstall: true → uninstall then install.
 // Values source: none (default) | repository | yaml
+// Optional valuesOverlay is merged last in Jenkins into one string values (not a fourth source).
 // Workspace: none / yaml may run outside node (agent none). repository needs an agent with git.
 // Hosts: portainer.example / charts.example / gitlab.example only
 
@@ -29,7 +30,7 @@ pipeline {
                     // valuesSource: 'none',  // default — chart defaults only
                     // ensureNamespace: true,  // default; set false to skip
                     atomic: true,
-                    waitTimeoutSeconds: '300'  // poll release Ready after install (default 300)
+                    waitTimeoutSeconds: '300'  // Jenkins settle poll after POST (default 300); not Helm --timeout
                     // forceReinstall: true  // destructive: uninstall then install
                 )
             }
@@ -50,6 +51,10 @@ image:
   tag: alpine
 service:
   type: ClusterIP
+''',
+                    valuesOverlay: '''
+image:
+  tag: "${BUILD_TAG}"
 ''',
                     atomic: true
                 )

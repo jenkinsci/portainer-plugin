@@ -1424,10 +1424,29 @@ public class PortainerClientTest {
 
     @Test
     public void httpError_statusCodesAndIsHttpStatusHelpers() {
+        byte[] html = "<!DOCTYPE html><html>".getBytes(StandardCharsets.UTF_8);
+        URI httpPortainer = URI.create("http://portainer.example:9000/api/status");
+        URI httpsPortainer = URI.create("https://portainer.example:9443/api/status");
+
         assertTrue(PortainerClient.httpError(404, new byte[0]).getMessage().contains("404"));
         assertTrue(PortainerClient.httpError(409, "{\"message\":\"x\"}".getBytes(StandardCharsets.UTF_8))
                 .getMessage()
                 .contains("409"));
+
+        String http308 = PortainerClient.httpError(308, html, httpPortainer).getMessage();
+        assertTrue(http308.contains("HTTP 308"));
+        assertTrue(http308.contains("https://"));
+        assertFalse(http308.contains("UI page"));
+
+        String https308 = PortainerClient.httpError(308, html, httpsPortainer).getMessage();
+        assertTrue(https308.contains("redirect"));
+        assertFalse(https308.contains("UI page"));
+        assertFalse(https308.contains("often http:// to https://"));
+
+        assertTrue(PortainerClient.httpError(502, html).getMessage().contains("HTML"));
+        assertTrue(PortainerClient.isHttpRedirectStatus(302));
+        assertFalse(PortainerClient.isHttpRedirectStatus(500));
+
         assertTrue(PortainerClient.classifyChartRepoFetchFailure("connection refused").contains("network"));
         assertEquals("chart repo unreachable", PortainerClient.classifyChartRepoFetchFailure("weird"));
         assertEquals("", PortainerClient.extractInnermostGetFailure(null));

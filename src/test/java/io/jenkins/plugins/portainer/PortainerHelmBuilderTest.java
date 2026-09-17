@@ -236,10 +236,96 @@ class PortainerHelmBuilderTest {
         step.setValuesSource(PortainerHelmBuilder.VALUES_NONE);
         project.getBuildersList().add(step);
 
-        jenkins.buildAndAssertSuccess(project);
+        FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
         assertTrue(installCalled.get());
         String body = lastInstallBody.get();
         assertTrue(body != null && !body.contains("\"values\""));
+        assertHelmBodyHasNoCatalogFlags(body);
+        jenkins.assertLogContains("valuesOverlay=false", build);
+    }
+
+    @Test
+    void freestyle_overlay_mergesIntoValuesString(JenkinsRule jenkins) throws Exception {
+        configurePortainer();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        PortainerHelmBuilder step = new PortainerHelmBuilder(
+                "1", "nginx", "nginx", "https://charts.example/bitnami");
+        step.setNamespace("default");
+        step.setValuesSource(PortainerHelmBuilder.VALUES_YAML);
+        step.setValues("replicaCount: 1\nimage:\n  tag: base\n");
+        step.setValuesOverlay("image:\n  tag: overlay-tag\n");
+        step.setAtomic(true);
+        project.getBuildersList().add(step);
+
+        FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
+        jenkins.assertLogNotContains("overlay-tag", build);
+        jenkins.assertLogContains("valuesOverlay=true", build);
+        assertTrue(installCalled.get());
+        assertEquals(List.of("POST"), helmMutationOrder);
+        String body = lastInstallBody.get();
+        assertHelmBodyHasNoCatalogFlags(body);
+        com.fasterxml.jackson.databind.JsonNode json =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
+        assertTrue(json.path("atomic").asBoolean());
+        assertFalse(json.has("version"));
+        com.fasterxml.jackson.databind.JsonNode values = YamlValues.toJsonNode(json.path("values").asText());
+        assertEquals(1, values.path("replicaCount").asInt());
+        assertEquals("overlay-tag", values.path("image").path("tag").asText());
+    }
+
+    @Test
+    void freestyle_overlayOnly_omitsBaseAndCatalogFlags(JenkinsRule jenkins) throws Exception {
+        configurePortainer();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        PortainerHelmBuilder step = new PortainerHelmBuilder(
+                "1", "nginx", "nginx", "https://charts.example/bitnami");
+        step.setNamespace("default");
+        step.setValuesSource(PortainerHelmBuilder.VALUES_NONE);
+        step.setValuesOverlay("image:\n  tag: overlay-only\n");
+        project.getBuildersList().add(step);
+
+        jenkins.buildAndAssertSuccess(project);
+        String body = lastInstallBody.get();
+        assertHelmBodyHasNoCatalogFlags(body);
+        assertFalse(body.contains("\"atomic\""));
+        com.fasterxml.jackson.databind.JsonNode values = YamlValues.toJsonNode(
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("values").asText());
+        assertEquals("overlay-only", values.path("image").path("tag").asText());
+        assertFalse(values.has("replicaCount"));
+    }
+
+    @Test
+    void freestyle_validateOnly_withOverlay_skipsHelm(JenkinsRule jenkins) throws Exception {
+        configurePortainer();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        PortainerHelmBuilder step = new PortainerHelmBuilder(
+                "1", "nginx", "nginx", "https://charts.example/bitnami");
+        step.setNamespace("default");
+        step.setValuesOverlay("image:\n  tag: build-1\n");
+        step.setValidateOnly(true);
+        project.getBuildersList().add(step);
+
+        FreeStyleBuild build = jenkins.buildAndAssertSuccess(project);
+        jenkins.assertLogContains("valuesOverlay=true", build);
+        assertFalse(installCalled.get());
+        assertFalse(helmListCalled.get());
+        assertFalse(uninstallCalled.get());
+        assertFalse(namespaceCreateCalled.get());
+    }
+
+    @Test
+    void freestyle_badOverlay_abortsWithoutPost(JenkinsRule jenkins) throws Exception {
+        configurePortainer();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        PortainerHelmBuilder step = new PortainerHelmBuilder(
+                "1", "nginx", "nginx", "https://charts.example/bitnami");
+        step.setValuesOverlay("not-a-mapping");
+        project.getBuildersList().add(step);
+
+        FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
+        jenkins.assertLogContains("mapping", build);
+        assertFalse(installCalled.get());
+        assertTrue(helmMutationOrder.isEmpty());
     }
 
     @Test
@@ -522,10 +608,11 @@ class PortainerHelmBuilderTest {
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
         jenkins.assertLogContains("not a Kubernetes Portainer environment", build);
+        jenkins.assertLogNotContains("[ERROR] Endpoint ID", build);
     }
 
     @Test
-    void freestyle_listHelm500_showsDetailsHintAndStackTrace(JenkinsRule jenkins) throws Exception {
+    void freestyle_listHelm500_showsDetailsAndHint(JenkinsRule jenkins) throws Exception {
         configurePortainer();
         server.stop(0);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -573,13 +660,15 @@ class PortainerHelmBuilderTest {
         project.getBuildersList().add(step);
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("[ERROR] Helm operation failed: HTTP 500", build);
+        jenkins.assertLogContains("HTTP 500", build);
+        jenkins.assertLogNotContains("[ERROR] HTTP 500", build);
+        jenkins.assertLogNotContains("Helm operation failed:", build);
         jenkins.assertLogNotContains("ERROR: Portainer:", build);
         jenkins.assertLogContains("Kubernetes cluster unreachable", build);
         jenkins.assertLogContains("HTTP response to HTTPS client", build);
         jenkins.assertLogContains("Hint:", build);
         jenkins.assertLogContains("TLS mismatch", build);
-        jenkins.assertLogContains("at io.jenkins.plugins.portainer.PortainerClient", build);
+        jenkins.assertLogNotContains("at io.jenkins.plugins.portainer.PortainerClient", build);
         jenkins.assertLogNotContains("test-token", build);
     }
 
@@ -625,6 +714,7 @@ class PortainerHelmBuilderTest {
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
         jenkins.assertLogContains("Preflight failed:", build);
+        jenkins.assertLogNotContains("[ERROR] Preflight failed", build);
         jenkins.assertLogContains("Hint:", build);
         jenkins.assertLogContains("TLS mismatch", build);
         jenkins.assertLogContains("fix in Portainer", build);
@@ -711,7 +801,8 @@ class PortainerHelmBuilderTest {
         step.setValidateOnly(true);
         project.getBuildersList().add(step);
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("Wait timeout must be a positive number of seconds", build);
+        jenkins.assertLogContains("Settle timeout must be a positive number of seconds", build);
+        jenkins.assertLogNotContains("Wait timeout must be", build);
     }
 
     private void configurePortainer() {
@@ -742,6 +833,16 @@ class PortainerHelmBuilderTest {
             return java.net.URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8);
         }
         return "default";
+    }
+
+    private static void assertHelmBodyHasNoCatalogFlags(String body) {
+        assertTrue(body != null);
+        assertFalse(body.contains("\"wait\""));
+        assertFalse(body.contains("\"timeout\""));
+        assertFalse(body.contains("\"cleanupOnFail\""));
+        assertFalse(body.contains("\"helmWait\""));
+        assertFalse(body.contains("\"projectId\""));
+        assertFalse(body.contains("\"charts\""));
     }
 
     private static boolean isHelmMutateApi(String path, String method) {
