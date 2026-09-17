@@ -1,3 +1,6 @@
 <div>
   <p>Git repository URL (http/https). No credentials in the URL — use <b>Git credentials</b> for private repos.</p>
+  <p>On GitLab, project visibility <strong>Public</strong> does not always allow <code>git clone</code>:
+    if Settings → Visibility → Repository (download code) is off, clone fails with a download-disabled
+    error — that is not a missing Jenkins git credential.</p>
 </div>

@@ -6,7 +6,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class KubernetesWaitTest {
 
@@ -40,9 +42,16 @@ public class KubernetesWaitTest {
         assertEquals(KubernetesWait.DEFAULT_TIMEOUT_SECONDS, KubernetesWait.parseTimeoutSeconds(null));
         assertEquals(KubernetesWait.DEFAULT_TIMEOUT_SECONDS, KubernetesWait.parseTimeoutSeconds("  "));
         assertEquals(15, KubernetesWait.parseTimeoutSeconds("15"));
-        assertThrows(IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("0"));
-        assertThrows(IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("-1"));
-        assertThrows(IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("abc"));
+        IllegalArgumentException zero = assertThrows(
+                IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("0"));
+        assertTrue(zero.getMessage().contains("Settle timeout must be a positive number of seconds"));
+        assertFalse(zero.getMessage().contains("Wait timeout"));
+        IllegalArgumentException neg = assertThrows(
+                IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("-1"));
+        assertTrue(neg.getMessage().contains("Settle timeout"));
+        IllegalArgumentException bad = assertThrows(
+                IllegalArgumentException.class, () -> KubernetesWait.parseTimeoutSeconds("abc"));
+        assertTrue(bad.getMessage().contains("Settle timeout"));
     }
 
     @Test

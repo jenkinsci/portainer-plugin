@@ -6,6 +6,7 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import com.fasterxml.jackson.databind.JsonNode;
 import hudson.model.AbstractProject;
 import hudson.model.Item;
 import hudson.model.Run;
@@ -36,8 +37,9 @@ import java.util.regex.Pattern;
  * (Type 5/6/7).
  * <p>
  * Values: {@link HelmValuesSource#NONE} (default / chart defaults), {@link HelmValuesSource#REPOSITORY}
- * (Jenkins shallow-clones a values file), or {@link HelmValuesSource#YAML} (inline). Portainer
- * accepts only string {@code values} — there is no Git values API in Portainer.
+ * (Jenkins shallow-clones a values file), or {@link HelmValuesSource#YAML} (inline). Optional
+ * {@code valuesOverlay} is deep-merged last in Jenkins and sent as one YAML string {@code values}.
+ * Portainer has no Git values API and no overlay field.
  */
 public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
 
@@ -64,6 +66,7 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
     /** Values source: {@code none} (default), {@code repository}, or {@code yaml}. */
     private String valuesSource;
     private String values;
+    private String valuesOverlay;
     private String valuesRepositoryUrl;
     private String valuesFilePath;
     private String valuesGitCredentialsId;
@@ -151,6 +154,15 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
     @DataBoundSetter
     public void setValues(String values) {
         this.values = values;
+    }
+
+    public String getValuesOverlay() {
+        return valuesOverlay == null || valuesOverlay.isBlank() ? null : valuesOverlay;
+    }
+
+    @DataBoundSetter
+    public void setValuesOverlay(String valuesOverlay) {
+        this.valuesOverlay = valuesOverlay == null || valuesOverlay.isBlank() ? null : valuesOverlay;
     }
 
     public String getValuesRepositoryUrl() {
@@ -362,24 +374,25 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
             if (!HelmValuesSource.isNone(inputs.mode)) {
                 log.info("Loading values");
             }
-            final String valuesYaml;
+            final MergedValues merged;
             try {
-                valuesYaml = resolveValues(new ResolveValuesRequest(
+                String baseYaml = resolveValues(new ResolveValuesRequest(
                                 inputs.mode, buildEnv, item, workspace, launcher, listener, valuesRepo))
                         .content;
+                merged = mergeValuesOverlay(baseYaml, buildEnv);
             } catch (IllegalArgumentException | IllegalStateException e) {
                 throw PortainerConnections.abort(log, e.getMessage());
             } catch (IOException e) {
-                throw PortainerConnections.abort(log, PortainerConnections.truncateMessage(e), e, true);
+                throw PortainerConnections.abort(log, PortainerConnections.truncateMessage(e), e);
             }
-            logReleasePlan(log, inputs, valuesYaml);
+            logReleasePlan(log, inputs, merged);
 
             if (validateOnly) {
-                finishValidateOnly(log, startedNs, inputs);
+                finishValidateOnly(log, startedNs, inputs, merged.overlay);
                 return;
             }
 
-            deployAndSummarize(client, connection, apiKey, inputs, valuesYaml, log, startedNs);
+            deployAndSummarize(client, connection, apiKey, inputs, merged, log, startedNs);
         }
     }
 
@@ -426,6 +439,7 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
         return "chartRepo=" + inputs.chartRepo
                 + (blank(inputs.chartVersion) ? "" : " version=" + inputs.chartVersion)
                 + " valuesSource=" + inputs.mode
+                + " valuesOverlay=" + hasValuesOverlay()
                 + " atomic=" + atomic
                 + " forceReinstall=" + forceReinstall;
     }
@@ -448,18 +462,19 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
         return new ValuesRepoLocals(valuesRepoUrl, valuesGitRef, valuesPath);
     }
 
-    private void logReleasePlan(PortainerBuildLogger log, HelmParsedInputs inputs, String valuesYaml) {
+    private void logReleasePlan(PortainerBuildLogger log, HelmParsedInputs inputs, MergedValues merged) {
         log.info("Release name=" + inputs.release
                 + " chart=" + inputs.chart
                 + " namespace=" + inputs.namespace);
-        log.info("Values source=" + inputs.mode);
-        String valuesDebug = valuesDebugLine(inputs.mode, valuesYaml);
+        log.info("Values source=" + inputs.mode + " valuesOverlay=" + merged.overlay);
+        String valuesDebug = valuesDebugLine(merged.yaml);
         if (valuesDebug != null) {
             log.debug(valuesDebug);
         }
     }
 
-    private void finishValidateOnly(PortainerBuildLogger log, long startedNs, HelmParsedInputs inputs) {
+    private void finishValidateOnly(
+            PortainerBuildLogger log, long startedNs, HelmParsedInputs inputs, boolean valuesOverlayApplied) {
         log.info("Validate-only — skipping deploy");
         if (ensureNamespace) {
             log.debug("Would ensure namespace=" + inputs.namespace);
@@ -471,8 +486,11 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
                 + " namespace=" + inputs.namespace
                 + (blank(inputs.chartVersion) ? "" : " version=" + inputs.chartVersion)
                 + " valuesSource=" + inputs.mode
+                + " valuesOverlay=" + valuesOverlayApplied
                 + " waitTimeoutSeconds=" + inputs.waitTimeoutSeconds);
-        summarize(log, startedNs, "validated", inputs.release, inputs.chart, inputs.chartVersion);
+        summarize(
+                log, startedNs, "validated", inputs.release, inputs.chart, inputs.chartVersion, inputs.mode,
+                valuesOverlayApplied);
     }
 
     private void deployAndSummarize(
@@ -480,7 +498,7 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
             ResolvedConnection connection,
             String apiKey,
             HelmParsedInputs inputs,
-            String valuesYaml,
+            MergedValues merged,
             PortainerBuildLogger log,
             long startedNs) throws AbortException, IOException {
         try {
@@ -495,19 +513,20 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
                             inputs.chartRepo,
                             inputs.namespace,
                             inputs.chartVersion,
-                            valuesYaml,
+                            merged.yaml,
                             inputs.waitTimeoutSeconds),
                     log);
-            summarize(log, startedNs, outcome, inputs.release, inputs.chart, inputs.chartVersion);
+            summarize(
+                    log, startedNs, outcome, inputs.release, inputs.chart, inputs.chartVersion, inputs.mode,
+                    merged.overlay);
         } catch (AbortException e) {
             throw e;
         } catch (IOException e) {
             String msg = PortainerConnections.truncateMessage(e);
             throw PortainerConnections.abort(
                     log,
-                    "Helm operation failed: " + msg + PortainerClient.kubernetesConnectivityHint(msg),
-                    e,
-                    true);
+                    msg + PortainerClient.kubernetesConnectivityHint(msg),
+                    e);
         }
     }
 
@@ -651,16 +670,39 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
         return buildEnv.expand(valuesFilePath);
     }
 
+    /**
+     * One values string for {@code POST …/kubernetes/helm}. Blank overlay keeps the base string
+     * (or omits {@code values}). Non-blank overlay is deep-merged and serialized as YAML.
+     */
+    private MergedValues mergeValuesOverlay(String baseYaml, EnvVars buildEnv) {
+        String raw = valuesOverlay == null || valuesOverlay.isBlank() ? "" : buildEnv.expand(valuesOverlay);
+        if (raw == null || raw.isBlank()) {
+            return new MergedValues(blankToNull(baseYaml), false);
+        }
+        JsonNode overlay = YamlValues.toJsonNode(raw);
+        String base = blankToNull(baseYaml);
+        JsonNode baseNode = base == null ? null : YamlValues.toJsonNode(base);
+        return new MergedValues(YamlValues.toYaml(YamlValues.merge(baseNode, overlay)), true);
+    }
+
+    private boolean hasValuesOverlay() {
+        return valuesOverlay != null && !valuesOverlay.isBlank();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
     private static boolean blank(String value) {
         return value == null || value.isBlank();
     }
 
-    /** Values payload size/hash for DEBUG; {@code null} when none (no values). */
-    private static String valuesDebugLine(String mode, String valuesYaml) {
-        if (HelmValuesSource.isNone(mode)) {
+    /** Values payload size/hash for DEBUG; {@code null} when the POST omits {@code values}. */
+    private static String valuesDebugLine(String valuesYaml) {
+        if (valuesYaml == null || valuesYaml.isBlank()) {
             return null;
         }
-        return "valuesLength=" + (valuesYaml == null ? 0 : valuesYaml.length())
+        return "valuesLength=" + valuesYaml.length()
                 + " valuesHash=" + PortainerConnections.shortContentHash(valuesYaml);
     }
 
@@ -670,7 +712,9 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
             String outcome,
             String release,
             String chartName,
-            String chartVersion) {
+            String chartVersion,
+            String valuesSource,
+            boolean valuesOverlayApplied) {
         var fields = PortainerBuildLogger.summaryFields();
         if (outcome != null && !outcome.isBlank()) {
             fields.put("outcome", outcome);
@@ -684,6 +728,10 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
         if (chartVersion != null && !chartVersion.isBlank()) {
             fields.put("version", chartVersion);
         }
+        if (valuesSource != null && !valuesSource.isBlank()) {
+            fields.put("valuesSource", valuesSource);
+        }
+        fields.put("valuesOverlay", String.valueOf(valuesOverlayApplied));
         log.summaryWithDuration(startedNs, fields);
     }
 
@@ -766,6 +814,16 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
             this.launcher = launcher;
             this.listener = listener;
             this.precomputed = precomputed;
+        }
+    }
+
+    private static final class MergedValues {
+        final String yaml;
+        final boolean overlay;
+
+        private MergedValues(String yaml, boolean overlay) {
+            this.yaml = yaml;
+            this.overlay = overlay;
         }
     }
 
@@ -919,6 +977,20 @@ public class PortainerHelmBuilder extends Builder implements SimpleBuildStep {
             }
             String err = KubernetesNamespaces.validate(value);
             return err == null ? FormValidation.ok() : FormValidation.error(err);
+        }
+
+        @POST
+        public FormValidation doCheckValuesOverlay(@QueryParameter String value, @AncestorInPath Item item) {
+            PortainerConnections.checkConfigure(item);
+            if (value == null || value.isBlank()) {
+                return FormValidation.ok();
+            }
+            try {
+                YamlValues.parseToMap(value);
+                return FormValidation.ok();
+            } catch (IllegalArgumentException e) {
+                return FormValidation.error(e.getMessage());
+            }
         }
 
         @POST

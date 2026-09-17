@@ -389,6 +389,7 @@ public class PortainerManifestBuilderTest {
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
         jenkins.assertLogContains("not a Kubernetes Portainer environment", build);
+        jenkins.assertLogNotContains("[ERROR] Endpoint ID", build);
         assertFalse(createCalled.get());
     }
 
@@ -438,7 +439,8 @@ public class PortainerManifestBuilderTest {
         step.setValidateOnly(true);
         project.getBuildersList().add(step);
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("Wait timeout must be a positive number of seconds", build);
+        jenkins.assertLogContains("Settle timeout must be a positive number of seconds", build);
+        jenkins.assertLogNotContains("Wait timeout must be", build);
     }
 
     private void configurePortainer() {

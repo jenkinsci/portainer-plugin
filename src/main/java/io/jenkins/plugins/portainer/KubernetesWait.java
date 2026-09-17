@@ -5,12 +5,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Locale;
 import java.util.Set;
 
-/** Wait timeout / poll interval and Helm release / Portainer application readiness. */
+/** Settle timeout / poll interval and Helm release / Portainer application readiness. */
 final class KubernetesWait {
 
     static final int DEFAULT_TIMEOUT_SECONDS = 300;
     static final String POLL_INTERVAL_MS_PROP = "portainer.k8s.pollIntervalMs";
     static final long DEFAULT_POLL_INTERVAL_MS = 2000L;
+    static final String SETTLE_TIMEOUT = "Settle timeout";
 
     private static final Set<String> HELM_READY = Set.of("deployed", "superseded");
     private static final Set<String> HELM_FAILED = Set.of("failed", "uninstalling", "unknown");
@@ -43,14 +44,19 @@ final class KubernetesWait {
         String raw = configured == null || configured.isBlank()
                 ? String.valueOf(DEFAULT_TIMEOUT_SECONDS)
                 : configured.trim();
+        return parsePositiveSeconds(raw, SETTLE_TIMEOUT);
+    }
+
+    static int parsePositiveSeconds(String configured, String controlName) {
+        String name = controlName == null || controlName.isBlank() ? SETTLE_TIMEOUT : controlName.trim();
         int seconds;
         try {
-            seconds = Integer.parseInt(raw);
+            seconds = Integer.parseInt(configured == null ? "" : configured.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Wait timeout must be a positive number of seconds.");
+            throw new IllegalArgumentException(name + " must be a positive number of seconds.");
         }
         if (seconds <= 0) {
-            throw new IllegalArgumentException("Wait timeout must be a positive number of seconds.");
+            throw new IllegalArgumentException(name + " must be a positive number of seconds.");
         }
         return seconds;
     }
