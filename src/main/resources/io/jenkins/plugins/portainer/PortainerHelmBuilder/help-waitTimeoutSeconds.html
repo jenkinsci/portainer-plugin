@@ -1,6 +1,6 @@
 <div>
-  <p>Maximum seconds to wait after deploy until Kubernetes workloads are Ready (default 300).
-    Always on — there is no opt-out flag.</p>
+  <p>How long this job polls Portainer after the Helm POST until the release and labeled
+    workloads are ready. Default <code>300</code> seconds. Not sent as Helm <code>--timeout</code>.</p>
   <p>On timeout the build fails and may include a short pods hint. Secrets and values are never
     written to the log.</p>
 </div>

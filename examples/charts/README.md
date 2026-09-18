@@ -45,12 +45,16 @@ service:
     // valuesFilePath: 'values.yaml',
     // valuesGitCredentialsId: 'git-clone',
     // valuesRepositoryReferenceName: 'refs/heads/main',
-    atomic: true
+    atomic: true,
+    valuesOverlay: '''
+image:
+  tag: "${BUILD_TAG}"
+'''
 )
 ```
 
 Full pipeline sample: `../PipelineSyntax.portainerHelm.groovy`.
 
-**Values source:** default **No source** (`valuesSource: 'none'` / omit). **Manual YAML** (`yaml` + `values`). **Repository** (`repository` + Git URL / path / optional creds / ref) — Jenkins shallow-clones (private repos via `GIT_ASKPASS`) and POSTs file content as Portainer `values` (no Git values API). Requires `git` on the agent PATH.
+**Values source:** default **No source** (`valuesSource: 'none'` / omit). **Manual YAML** (`yaml` + `values`). **Repository** (`repository` + Git URL / path / optional creds / ref) — Jenkins shallow-clones (private repos via `GIT_ASKPASS`) and POSTs file content as Portainer `values` (no Git values API). Optional `valuesOverlay` is merged last into that same string. Requires `git` on the agent PATH when the source is Repository.
 
 **Ensure namespace:** on by default before install/upgrade/force-reinstall; set `ensureNamespace: false` to skip; skipped under `validateOnly`.

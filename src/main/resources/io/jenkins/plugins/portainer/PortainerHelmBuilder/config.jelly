@@ -49,7 +49,13 @@
         <f:textarea/>
       </f:entry>
     </f:radioBlock>
+    <f:entry title="${%Values overlay}" field="valuesOverlay">
+      <f:textarea/>
+    </f:entry>
     <f:advanced title="${%Advanced}">
+      <f:entry title="${%Settle timeout (seconds)}" field="waitTimeoutSeconds">
+        <f:textbox default="300"/>
+      </f:entry>
       <f:entry title="${%Atomic}" field="atomic">
         <f:checkbox/>
       </f:entry>
@@ -58,9 +64,6 @@
       </f:entry>
       <f:entry title="${%Ensure namespace}" field="ensureNamespace">
         <f:checkbox checked="${instance == null || instance.ensureNamespace}"/>
-      </f:entry>
-      <f:entry title="${%Wait timeout (seconds)}" field="waitTimeoutSeconds">
-        <f:textbox default="300"/>
       </f:entry>
       <f:entry title="${%Validate only}" field="validateOnly">
         <f:checkbox/>
