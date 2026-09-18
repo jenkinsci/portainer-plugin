@@ -30,7 +30,7 @@ import java.util.logging.Logger;
  *   <li>Preflight: {@code Preflight check of Vault|Git|endpoint N (name)}</li>
  *   <li>INFO = counts / outcomes; DEBUG (verbose) = names, hashes, exists/missing, env lists</li>
  *   <li>Soft prune → {@code [WARN]}; successful prune → {@code [INFO] Pruned: …}</li>
- *   <li>Hard failure: throw {@code AbortException}; do not also print {@code [ERROR]} from abort</li>
+ *   <li>One {@code [ERROR]} inside the frame</li>
  *   <li>Never log secret values, tokens, or passwords</li>
  * </ul>
  */
@@ -136,7 +136,8 @@ final class PortainerBuildLogger implements AutoCloseable {
     }
 
     /**
-     * Console summary + stack trace, and JUL SEVERE with stack.
+     * Console summary + stack trace, and JUL SEVERE with stack. Use when operators need full
+     * failure context (e.g. Helm); callers still throw {@link hudson.AbortException} for Jenkins.
      */
     void error(String message, Throwable thrown) {
         error(message);

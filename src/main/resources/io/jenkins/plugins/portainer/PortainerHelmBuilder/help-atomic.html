@@ -1,6 +1,3 @@
 <div>
-  <p>When checked, the Helm install body includes <code>"atomic": true</code>
-    (Helm <code>--atomic</code> on Portainer). Unchecked omits the key.</p>
-  <p>This is not Helm wait, timeout, or cleanup-on-fail. Portainer's install payload does not
-    accept those fields. Readiness after the POST is <strong>Settle timeout</strong>.</p>
+  <p>When checked, pass <code>atomic: true</code> to Portainer Helm install (rollback on failure when supported).</p>
 </div>

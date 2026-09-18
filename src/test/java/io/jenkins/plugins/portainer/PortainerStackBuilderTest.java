@@ -752,9 +752,7 @@ public class PortainerStackBuilderTest {
         project.getBuildersList().add(repoStack("1", "compose", "demo", "https://gitlab.example/group/stack.git"));
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("Preflight failed: HTTP 500 - boom", build);
-        jenkins.assertLogNotContains("[ERROR] Preflight failed", build);
-        jenkins.assertLogNotContains("Stack operation failed:", build);
+        jenkins.assertLogContains("[ERROR] Preflight failed: HTTP 500 - boom", build);
         jenkins.assertLogNotContains("ERROR: Portainer:", build);
         jenkins.assertLogNotContains("at io.jenkins.plugins.portainer.PortainerClient", build);
         assertTrue(!createCalled.get());
@@ -773,8 +771,7 @@ public class PortainerStackBuilderTest {
         project.getBuildersList().add(repoStack("1", "compose", "demo", "https://gitlab.example/group/stack.git"));
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("Preflight failed", build);
-        jenkins.assertLogNotContains("[ERROR] Preflight failed", build);
+        jenkins.assertLogContains("[ERROR] Preflight failed", build);
         assertTrue(!createCalled.get());
     }
 
@@ -788,8 +785,7 @@ public class PortainerStackBuilderTest {
         project.getBuildersList().add(repoStack("99", "compose", "demo", "https://gitlab.example/group/stack.git"));
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
-        jenkins.assertLogContains("Preflight failed", build);
-        jenkins.assertLogNotContains("[ERROR] Preflight failed", build);
+        jenkins.assertLogContains("[ERROR] Preflight failed", build);
         jenkins.assertLogContains("endpoint ID 99", build);
         assertTrue(!createCalled.get());
     }

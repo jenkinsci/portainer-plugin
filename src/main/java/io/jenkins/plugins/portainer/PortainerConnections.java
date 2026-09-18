@@ -179,10 +179,15 @@ final class PortainerConnections {
     }
 
     static AbortException abort(PortainerBuildLogger log, String message) {
-        return abort(log, message, null);
+        return abort(log, message, null, false);
     }
 
     static AbortException abort(PortainerBuildLogger log, String message, Throwable thrown) {
+        return abort(log, message, thrown, false);
+    }
+
+    static AbortException abort(
+            PortainerBuildLogger log, String message, Throwable thrown, boolean consoleStackTrace) {
         if (thrown instanceof PortainerLoggedAbort already) {
             return already;
         }
@@ -190,9 +195,15 @@ final class PortainerConnections {
         if (body.isEmpty()) {
             body = "failed";
         }
-        // Do not write [ERROR] to the build console — Jenkins/Pipeline already prints AbortException once.
-        if (log != null && thrown != null) {
-            log.errorJul(body, thrown);
+        if (log != null && !log.hasLoggedError()) {
+            if (consoleStackTrace && thrown != null) {
+                log.error(body, thrown);
+            } else if (thrown != null) {
+                log.errorJul(body, thrown);
+                log.error(body);
+            } else {
+                log.error(body);
+            }
         }
         return new PortainerLoggedAbort(body);
     }

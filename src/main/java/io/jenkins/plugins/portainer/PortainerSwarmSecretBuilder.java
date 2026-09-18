@@ -323,6 +323,7 @@ public class PortainerSwarmSecretBuilder extends Builder implements SimpleBuildS
         if (missing.isEmpty() && extra.isEmpty()) {
             return;
         }
+        log.error(PortainerBuildLogger.formatKeysDiffer(missing.size(), extra.size()));
         if (!missing.isEmpty()) {
             log.debug("Missing: " + PortainerBuildLogger.formatNameList(missing));
         }

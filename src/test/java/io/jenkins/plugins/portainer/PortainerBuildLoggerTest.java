@@ -1,5 +1,6 @@
 package io.jenkins.plugins.portainer;
 
+import hudson.AbortException;
 import hudson.model.TaskListener;
 import hudson.util.StreamTaskListener;
 import org.junit.jupiter.api.Test;
@@ -153,6 +154,17 @@ class PortainerBuildLoggerTest {
         }
         String out = buf.toString(StandardCharsets.UTF_8);
         assertTrue(out.contains("[DEBUG] GET /api/status (1ms)"));
+    }
+
+    @Test
+    void abort_consoleErrorWithoutPortainerPrefix() {
+        PortainerBuildLogger log = new PortainerBuildLogger(Logger.getLogger("test"), null, false);
+        AbortException ex = PortainerConnections.abort(log, "vault path not found");
+        assertTrue(ex instanceof PortainerLoggedAbort);
+        assertEquals("vault path not found", ex.getMessage());
+        assertTrue(log.hasLoggedError());
+        AbortException again = PortainerConnections.abort(log, "other");
+        assertTrue(again instanceof PortainerLoggedAbort);
     }
 
     @Test

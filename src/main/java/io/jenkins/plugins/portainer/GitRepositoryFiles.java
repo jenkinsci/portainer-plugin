@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -305,45 +304,15 @@ final class GitRepositoryFiles {
                 .joinWithTimeout(10, TimeUnit.MINUTES, listener);
         if (code != 0) {
             String detail = scrubSecrets(err.toString(StandardCharsets.UTF_8), auth);
-            throw new IOException(cloneFailureMessage(code, detail, failureLabel));
+            if (detail.length() > 240) {
+                detail = detail.substring(0, 240) + "…";
+            }
+            throw new IOException(
+                    "Failed to clone " + failureLabel + " repository (git exit " + code
+                            + "). Check URL, reference, credentials, and that git is on PATH."
+                            + (detail.isBlank() ? "" : " Detail: " + detail.replaceAll("\\s+", " ").trim()));
         }
         return checkout;
-    }
-
-    /**
-     * Operator-facing clone failure: one reason from stderr, plus scrubbed {@code Detail:} when useful.
-     * GitLab "download code" / Repository disabled is not a Jenkins credentials or PATH problem.
-     */
-    static String cloneFailureMessage(int code, String scrubbedStderr, String failureLabel) {
-        String detail = scrubbedStderr == null ? "" : scrubbedStderr.replaceAll("\\s+", " ").trim();
-        if (detail.length() > 240) {
-            detail = detail.substring(0, 240) + "…";
-        }
-        String reason = classifyCloneFailure(code, detail, failureLabel);
-        if (detail.isBlank()) {
-            return reason;
-        }
-        if (reason.toLowerCase(Locale.ROOT).contains(detail.toLowerCase(Locale.ROOT))) {
-            return reason;
-        }
-        return reason + " Detail: " + detail;
-    }
-
-    static String classifyCloneFailure(int code, String scrubbedDetail, String failureLabel) {
-        String label = failureLabel == null || failureLabel.isBlank() ? "Git" : failureLabel;
-        String lower = scrubbedDetail == null ? "" : scrubbedDetail.toLowerCase(Locale.ROOT);
-        if (lower.contains("you are not allowed to download code from this project")
-                || lower.contains("repository access disabled")
-                || lower.contains("git access is disabled")) {
-            return "Failed to clone " + label + " repository (git exit " + code
-                    + "). GitLab is not serving git for this project "
-                    + "(Repository / download code is disabled). "
-                    + "Public project visibility does not enable git clone. "
-                    + "Enable Repository in the GitLab project settings, or use a URL where git clone is allowed. "
-                    + "This is not a Jenkins git credentials or PATH problem.";
-        }
-        return "Failed to clone " + label + " repository (git exit " + code
-                + "). Check URL, reference, credentials, and that git is on PATH.";
     }
 
     /**

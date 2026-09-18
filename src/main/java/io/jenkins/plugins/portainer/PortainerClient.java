@@ -1593,9 +1593,6 @@ final class PortainerClient implements AutoCloseable {
     }
 
     static IOException httpError(int code, byte[] bodyBytes, URI uri) {
-        if (isHttpRedirectStatus(code)) {
-            return new IOException(httpRedirectMessage(code, uri));
-        }
         if (looksLikeHtml(bodyBytes)) {
             return new IOException(
                     HTTP_STATUS_PREFIX
@@ -1646,28 +1643,6 @@ final class PortainerClient implements AutoCloseable {
     /** Package-visible for tests. */
     static IOException httpError(int code, byte[] bodyBytes) {
         return httpError(code, bodyBytes, null);
-    }
-
-    static boolean isHttpRedirectStatus(int code) {
-        return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
-    }
-
-    static String httpRedirectMessage(int code, URI uri) {
-        if (uri != null && "http".equalsIgnoreCase(uri.getScheme())) {
-            return HTTP_STATUS_PREFIX
-                    + code
-                    + " - Portainer URL redirected (often http:// to https://)."
-                    + " Use the API base URL the server actually serves"
-                    + " (typically https://host:9443 when TLS is required, or http://host:9000),"
-                    + " without a UI-only path."
-                    + " This plugin does not follow HTTP redirects.";
-        }
-        return HTTP_STATUS_PREFIX
-                + code
-                + " - HTTP redirect was not followed."
-                + " Use the API base URL (typically http://host:9000 or https://host:9443),"
-                + " not a redirecting or UI-only path."
-                + " This plugin does not follow HTTP redirects.";
     }
 
     /**

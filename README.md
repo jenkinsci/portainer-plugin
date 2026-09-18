@@ -16,10 +16,10 @@ Typical flows:
 
 - Ship a Compose or Swarm stack from Git (or paste YAML) and upsert it on an endpoint
 - Ensure Swarm **configs** from Git and **secrets** from Vault before the stack redeploy
-- Apply Kubernetes manifests or install/upgrade a Helm chart; optional `valuesOverlay`
+- Apply Kubernetes manifests or install/upgrade Helm charts on Kubernetes environments
 - Run **Validate only** to preflight connections without mutating Portainer
 
-Build logs stay scannable: short INFO phases and a **Summary** with `outcome=created|updated|…` (and related fields). Secrets, tokens, and YAML bodies are never dumped to the console. Failures surface once as the abort / `ERROR:` message from the client (no duplicated `[ERROR]` banner line, no `Stack operation failed:` / `Manifest operation failed:` wrapper).
+Build logs stay scannable: short INFO phases and a **Summary** with `outcome=created|updated|…` (and related fields). Secrets, tokens, and YAML bodies are never dumped to the console.
 
 ## Features
 
@@ -29,7 +29,7 @@ Build logs stay scannable: short INFO phases and a **Summary** with `outcome=cre
 - **Portainer Stack Config** (`portainerStackConfig`, alias `portainerSwarmConfig`) — Swarm Docker configs from Git (content-hash names; run before Stack when using `external: true`)
 - **Portainer Stack Secret** (`portainerStackSecret`, alias `portainerSwarmSecret`) — Swarm Docker secrets from Vault KV v2 (content-hash names; run before Config + Stack when needed)
 - **Portainer Manifest Deployment** (`portainerManifest`) — Kubernetes manifests from Git or manual YAML
-- **Portainer Helm Deployment** (`portainerHelm`) — Helm install / upgrade; values from chart defaults, Git, or inline YAML; optional `valuesOverlay`
+- **Portainer Helm Deployment** (`portainerHelm`) — Helm install / upgrade; values from chart defaults, Git, or inline YAML
 - **Vault** — optional overlay into Stack `Env[]` (Not connected / Inherit via [HashiCorp Vault Plugin](https://plugins.jenkins.io/hashicorp-vault-plugin/) / Manual AppRole); Stack Secret reads KV for Docker secrets (not Stack Env)
 - **`validateOnly`** — resolve + Portainer (and Vault when connected) preflight; log what would happen; no create/update
 - **Summary logs** — `created` / `updated` (and step-specific counts) with duration-friendly summaries
@@ -100,8 +100,8 @@ More examples:
 | **Portainer Stack Deployment** | `portainerStack` | Create/update Compose or Swarm stacks from Git or manual YAML; optional Vault → Env |
 | **Portainer Stack Config** | `portainerStackConfig` (`portainerSwarmConfig`) | Ensure Swarm configs from a Git path; publish env keys for the Stack step |
 | **Portainer Stack Secret** | `portainerStackSecret` (`portainerSwarmSecret`) | Ensure Swarm secrets from Vault KV v2; publish env keys for external secrets |
-| **Portainer Manifest Deployment** | `portainerManifest` | Apply Kubernetes manifests; settle poll until workloads Ready (`waitTimeoutSeconds`) |
-| **Portainer Helm Deployment** | `portainerHelm` | Install/upgrade Helm charts (`http`/`https`/`oci://` repo); optional `valuesOverlay`; settle poll until release Ready |
+| **Portainer Manifest Deployment** | `portainerManifest` | Apply Kubernetes manifests; wait until workloads Ready (`waitTimeoutSeconds`) |
+| **Portainer Helm Deployment** | `portainerHelm` | Install/upgrade Helm charts (`http`/`https`/`oci://` repo); wait until release Ready |
 
 **Suggested Swarm order:** Stack Secret (if used) → Stack Config → Stack Deployment.
 

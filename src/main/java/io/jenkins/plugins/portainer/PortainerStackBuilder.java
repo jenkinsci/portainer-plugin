@@ -572,7 +572,8 @@ public class PortainerStackBuilder extends Builder implements SimpleBuildStep {
         } catch (AbortException e) {
             throw e;
         } catch (IOException e) {
-            throw PortainerConnections.abort(log, PortainerConnections.truncateMessage(e), e);
+            String summary = "Stack operation failed: " + PortainerConnections.truncateMessage(e);
+            throw PortainerConnections.abort(log, summary, e);
         }
     }
 

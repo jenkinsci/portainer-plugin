@@ -372,7 +372,8 @@ public class PortainerManifestBuilder extends Builder implements SimpleBuildStep
         } catch (AbortException e) {
             throw e;
         } catch (IOException e) {
-            throw PortainerConnections.abort(log, PortainerConnections.truncateMessage(e), e);
+            throw PortainerConnections.abort(
+                    log, "Manifest operation failed: " + PortainerConnections.truncateMessage(e), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw PortainerConnections.abort(log, "Manifest wait interrupted", e);

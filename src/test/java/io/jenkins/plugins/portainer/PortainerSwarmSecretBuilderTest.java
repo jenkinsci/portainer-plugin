@@ -199,7 +199,6 @@ public class PortainerSwarmSecretBuilderTest {
 
         FreeStyleBuild build = jenkins.buildAndAssertStatus(Result.FAILURE, project);
         jenkins.assertLogContains("Keys differ: missing=1 extra=1", build);
-        jenkins.assertLogNotContains("[ERROR] Keys differ", build);
         jenkins.assertLogNotContains("NEVER_LOG_THIS_SECRET_BODY", build);
         assertTrue(!createCalled.get());
     }
